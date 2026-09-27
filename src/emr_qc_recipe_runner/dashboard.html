@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>病案质控配方实时抽评 · 浏览器面板</title>
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <style>
+    :root {
+      --color-bg: #f5f7fa;
+      --color-fg: #1a202c;
+      --color-muted: #6b7280;
+      --color-accent: #2563eb;
+      --color-pending: #dc2626;
+      --color-confirmed: #16a34a;
+      --color-border: #e5e7eb;
+      --color-card: #ffffff;
+      --color-tooltip: #1f2937;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: var(--color-bg);
+      color: var(--color-fg);
+      line-height: 1.5;
+    }
+    h1 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
+    .lede { color: var(--color-muted); margin: 0 0 24px; font-size: 14px; }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 380px;
+      gap: 24px;
+    }
+    @media (max-width: 960px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--color-card);
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      padding: 16px 20px;
+    }
+    .card h2 {
+      margin: 0 0 12px;
+      font-size: 16px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 500;
+      background: #f1f5f9;
+      color: var(--color-fg);
+    }
+    .badge-pending { background: #fee2e2; color: var(--color-pending); }
+    .badge-confirmed { background: #dcfce7; color: var(--color-confirmed); }
+    .badge-empty { background: #f1f5f9; color: var(--color-muted); }
+
+    /* — 命中矩阵 (CSS Grid) — */
+    .matrix-grid {
+      display: grid;
+      gap: 1px;
+      background: var(--color-border);
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      overflow: hidden;
+      font-size: 13px;
+    }
+    .matrix-cell {
+      background: var(--color-card);
+      padding: 8px 10px;
+      min-width: 80px;
+      text-align: center;
+    }
+    .matrix-cell.head {
+      background: #f8fafc;
+      font-weight: 600;
+      color: var(--color-muted);
+    }
+    .matrix-cell.row-head {
+      background: #f8fafc;
+      font-weight: 500;
+      text-align: left;
+      color: var(--color-fg);
+    }
+    .matrix-hit {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--color-pending);
+      cursor: help;
+    }
+    .matrix-hit.confirmed {
+      background: var(--color-confirmed);
+    }
+    .matrix-empty {
+      color: var(--color-muted);
+      font-size: 14px;
+    }
+
+    /* — 待确认队列 — */
+    .queue { display: flex; flex-direction: column; gap: 10px; max-height: 70vh; overflow-y: auto; }
+    .hit-row {
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      padding: 12px;
+      position: relative;
+      background: #fafafa;
+    }
+    .hit-row.confirmed { background: #f0fdf4; border-color: var(--color-confirmed); }
+    .hit-row .marker {
+      position: absolute;
+      top: 10px;
+      left: -7px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--color-pending);
+      box-shadow: 0 0 0 2px #fff, 0 0 0 3px var(--color-pending);
+    }
+    .hit-row.confirmed .marker {
+      background: var(--color-confirmed);
+      box-shadow: 0 0 0 2px #fff, 0 0 0 3px var(--color-confirmed);
+    }
+    .hit-meta {
+      font-size: 12px;
+      color: var(--color-muted);
+      margin-bottom: 6px;
+    }
+    .hit-meta strong { color: var(--color-fg); }
+
+    /* — AI 归因 tooltip — */
+    .attribution {
+      font-size: 13px;
+      color: var(--color-fg);
+      cursor: help;
+      border-bottom: 1px dotted var(--color-accent);
+      display: inline-block;
+      max-width: 100%;
+    }
+    .attribution-tooltip {
+      position: relative;
+      display: inline-block;
+    }
+    .attribution-tooltip .tip-body {
+      visibility: hidden;
+      opacity: 0;
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 0;
+      background: var(--color-tooltip);
+      color: #fff;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 1.5;
+      width: 280px;
+      z-index: 10;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      transition: opacity 120ms;
+    }
+    .attribution-tooltip:hover .tip-body,
+    .attribution-tooltip:focus-within .tip-body {
+      visibility: visible;
+      opacity: 1;
+    }
+    .tip-body .tip-evidence {
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid #374151;
+      color: #d1d5db;
+    }
+    .tip-arrow {
+      position: absolute;
+      top: 100%;
+      left: 16px;
+      border: 6px solid transparent;
+      border-top-color: var(--color-tooltip);
+    }
+
+    /* — 复选框（必勾才能 confirm）— */
+    .confirm-row {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .confirm-row input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--color-accent);
+      cursor: pointer;
+    }
+    .confirm-row label { cursor: pointer; color: var(--color-fg); }
+    .confirm-btn {
+      margin-left: auto;
+      padding: 4px 12px;
+      background: var(--color-accent);
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .confirm-btn:disabled {
+      background: #cbd5e1;
+      cursor: not-allowed;
+    }
+
+    .meta-summary {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+      font-size: 13px;
+      color: var(--color-muted);
+    }
+    .meta-summary strong { color: var(--color-fg); }
+
+    .sse-status {
+      font-size: 12px;
+      color: var(--color-muted);
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: #f1f5f9;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .sse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--color-muted);
+    }
+    .sse-dot.live { background: var(--color-confirmed); animation: pulse 2s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .empty-state {
+      padding: 24px;
+      text-align: center;
+      color: var(--color-muted);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <h1>病案质控配方实时抽评 · 浏览器面板</h1>
+  <p class="lede">
+    病案 × 规则命中矩阵 + 待确认队列；勾选「我已复核 AI 归因」后点确认。
+    {% include "sse_status_partial.html" ignore missing %}
+  </p>
+
+  <div class="grid-2">
+    <div class="card">
+      <h2>
+        命中矩阵
+        <span class="badge">{{ rule_versions | length }} 个规则版本</span>
+        <span class="badge badge-pending">{{ pending_count }} 待确认</span>
+        <span class="badge badge-confirmed">{{ confirmed_count }} 已确认</span>
+      </h2>
+
+      {% if encounters | length == 0 or rule_versions | length == 0 %}
+        <div class="empty-state">
+          暂无命中数据。请先在 <code>data/recipes/</code> 投入 recipe YAML，工作台 5 分钟内会跑批出命中。
+        </div>
+      {% else %}
+        <div class="matrix-grid"
+             style="grid-template-columns: 140px repeat({{ rule_versions | length }}, minmax(80px, 1fr));">
+          <div class="matrix-cell head">病案 ID</div>
+          {% for rv in rule_versions %}
+            <div class="matrix-cell head">{{ rv }}</div>
+          {% endfor %}
+
+          {% for enc in encounters %}
+            <div class="matrix-cell row-head">{{ enc.encounter_id }}</div>
+            {% for rv in rule_versions %}
+              {% set hit_key = enc.encounter_id ~ '||' ~ rv %}
+              {% if hit_key in matrix_hit_keys %}
+                <div class="matrix-cell">
+                  <span class="matrix-hit" title="{{ enc.encounter_id }} · {{ rv }} 命中"></span>
+                </div>
+              {% else %}
+                <div class="matrix-cell">
+                  <span class="matrix-empty">·</span>
+                </div>
+              {% endif %}
+            {% endfor %}
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h2>
+        待确认队列
+        <span class="badge badge-pending" id="pending-counter">{{ pending_count }} 条</span>
+      </h2>
+
+      {% if pending_hits | length == 0 %}
+        <div class="empty-state">暂无待确认命中。</div>
+      {% else %}
+        <div class="queue" id="pending-queue">
+          {% for hit in pending_hits %}
+            <div class="hit-row" id="hit-row-{{ hit.hit_id }}" data-hit-id="{{ hit.hit_id }}">
+              <span class="marker" aria-label="待确认"></span>
+
+              <div class="hit-meta">
+                <strong>{{ hit.encounter_id }}</strong>
+                · 规则 {{ hit.rule_version }}
+                · 缺失字段 <code>{{ hit.missing_field }}</code>
+                · 置信度 {{ '%.2f' | format(hit.confidence) }}
+              </div>
+
+              <div class="attribution-tooltip" tabindex="0">
+                <span class="attribution" aria-describedby="tip-{{ hit.hit_id }}">
+                  {{ hit.attribution }}
+                </span>
+                <div class="tip-body" id="tip-{{ hit.hit_id }}" role="tooltip">
+                  <div><strong>AI 归因：</strong>{{ hit.attribution }}</div>
+                  <div class="tip-evidence">
+                    {% if hit.evidence_lines | length > 0 %}
+                      <strong>证据行号：</strong>line {{ hit.evidence_lines | join(', ') }}
+                    {% else %}
+                      <strong>证据行号：</strong>无（模板回退，需人工复核）
+                    {% endif %}
+                  </div>
+                  <span class="tip-arrow"></span>
+                </div>
+              </div>
+
+              <div class="confirm-row">
+                <input
+                  type="checkbox"
+                  class="review-checkbox"
+                  id="review-{{ hit.hit_id }}"
+                  name="is_review_confirmed"
+                  value="true"
+                  data-hit-id="{{ hit.hit_id }}"
+                />
+                <label for="review-{{ hit.hit_id }}">我已复核 AI 归因</label>
+                <button
+                  type="button"
+                  class="confirm-btn"
+                  data-hit-id="{{ hit.hit_id }}"
+                  disabled
+                  hx-post="/api/hits"
+                  hx-vals='{"hit_id": "{{ hit.hit_id }}"}'
+                  hx-trigger="click"
+                  hx-target="#hit-row-{{ hit.hit_id }}"
+                  hx-swap="outerHTML"
+                  hx-disabled-elt="this"
+                >
+                  确认
+                </button>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <script>
+    // 复选框勾选后才能点 confirm
+    document.querySelectorAll('.review-checkbox').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        const hitId = cb.getAttribute('data-hit-id');
+        const btn = document.querySelector(
+          '.confirm-btn[data-hit-id="' + hitId + '"]'
+        );
+        if (btn) {
+          btn.disabled = !cb.checked;
+        }
+      });
+    });
+  </script>
+</body>
+</html>

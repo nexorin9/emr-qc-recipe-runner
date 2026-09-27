@@ -1,0 +1,22 @@
+# 病案首页完整性（v1.4）质控规则（tests/fixtures/ 测试用副本）
+#
+# 与 data/recipes/v1.4_homepage_integrity.yaml 字段一致；tests/test_pipeline_e2e.py
+# 端到端跑批走这条 recipe（30 份脱敏出院小结 + 1 份规则）。
+#
+# 反拟真纪律：本文件不含真实患者名 / 住院号 / 具体日期；占位类目与样例一致。
+
+rule_version: v1.4
+required_fields:
+  - 主诉
+  - 手术
+  - 入院时间
+  - 出院时间
+  - 主诊断
+time_window: 入院后 24h 内 + 出院前 24h 内
+attribution_template: "v1.4 首页完整性：{rule_name} 中 {missing_field} 缺失"
+sha256: 0000000000000000000000000000000000000000000000000000000000000000  # 自动重算
+rule_name: 病案首页完整性
+owner_team: 病案室
+description: |
+  v1.4 病案首页完整性检查（tests 副本）：5 类必填字段在病案中是否齐全。
+  任何一类缺失都触发 1 条 hit，待质控员人工复核。

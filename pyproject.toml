@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emr-qc-recipe-runner"
+version = "0.1.0"
+description = "病案质控配方实时抽评（EMR QC Recipe Runner）— 病案室/质控员的常驻工作台"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "nexorin" }]
+keywords = ["hospital", "emr", "qc", "ai", "sse"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Medical Science",
+]
+
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "jinja2>=3.1",
+    "pyyaml>=6.0",
+    "httpx>=0.27",
+    "sqlalchemy>=2.0",
+    "pyodbc>=5.1",
+    "chokidar>=1.5",
+    "jsonschema>=4.21",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest-asyncio>=0.23",
+    "mypy>=1.8",
+    "ruff>=0.3",
+]
+
+[project.scripts]
+emr-qc-recipe-runner = "emr_qc_recipe_runner.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+asyncio_mode = "auto"
